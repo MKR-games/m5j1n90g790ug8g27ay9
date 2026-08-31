@@ -20,7 +20,36 @@
   const SCROLL_KEY = "ttok-ttok-ttok-manual-scroll-position";
   const OPEN_KEY = "ttok-ttok-ttok-manual-open-sections";
 
-  const storedFont = Number(localStorage.getItem(FONT_KEY));
+  const getStorage = (name) => {
+    try {
+      return window[name];
+    } catch {
+      return null;
+    }
+  };
+
+  const localStore = getStorage("localStorage");
+  const sessionStore = getStorage("sessionStorage");
+
+  const safeGet = (storage, key) => {
+    if (!storage) return null;
+    try {
+      return storage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+
+  const safeSet = (storage, key, value) => {
+    if (!storage) return;
+    try {
+      storage.setItem(key, value);
+    } catch {
+      // 저장이 차단된 환경에서도 읽기 기능은 계속 동작한다.
+    }
+  };
+
+  const storedFont = Number(safeGet(localStore, FONT_KEY));
   let currentFont =
     Number.isFinite(storedFont) && storedFont >= MIN_FONT && storedFont <= MAX_FONT
       ? storedFont
@@ -28,7 +57,7 @@
 
   const applyFont = () => {
     root.style.setProperty("--body-size", `${currentFont}px`);
-    localStorage.setItem(FONT_KEY, String(currentFont));
+    safeSet(localStore, FONT_KEY, String(currentFont));
   };
 
   const saveOpenSections = () => {
@@ -36,7 +65,7 @@
       .filter((section) => section.querySelector(".section-toggle").getAttribute("aria-expanded") === "true")
       .map((section) => section.id);
 
-    localStorage.setItem(OPEN_KEY, JSON.stringify(openIds));
+    safeSet(localStore, OPEN_KEY, JSON.stringify(openIds));
   };
 
   const setSectionOpen = (section, shouldOpen, shouldSave = true) => {
@@ -117,7 +146,7 @@
     let savedOpenIds = null;
 
     try {
-      savedOpenIds = JSON.parse(localStorage.getItem(OPEN_KEY));
+      savedOpenIds = JSON.parse(safeGet(localStore, OPEN_KEY));
     } catch {
       savedOpenIds = null;
     }
@@ -164,8 +193,11 @@
     const ratio = scrollable > 0 ? Math.min(1, Math.max(0, scrollTop / scrollable)) : 0;
 
     progress.style.width = `${ratio * 100}%`;
-    backToTop.classList.toggle("is-visible", scrollTop > 700);
-    sessionStorage.setItem(SCROLL_KEY, String(scrollTop));
+    const shouldShowBackToTop = scrollTop > 700;
+    backToTop.classList.toggle("is-visible", shouldShowBackToTop);
+    backToTop.tabIndex = shouldShowBackToTop ? 0 : -1;
+    backToTop.setAttribute("aria-hidden", String(!shouldShowBackToTop));
+    safeSet(sessionStore, SCROLL_KEY, String(scrollTop));
   };
 
   window.addEventListener("scroll", updateScrollUI, { passive: true });
@@ -178,7 +210,7 @@
   restoreOpenState();
   updateScrollUI();
 
-  const savedPosition = Number(sessionStorage.getItem(SCROLL_KEY));
+  const savedPosition = Number(safeGet(sessionStore, SCROLL_KEY));
   if (Number.isFinite(savedPosition) && savedPosition > 0 && !location.hash) {
     requestAnimationFrame(() => {
       window.scrollTo({ top: savedPosition, behavior: "auto" });
